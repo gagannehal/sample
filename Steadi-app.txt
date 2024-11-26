@@ -1,0 +1,182 @@
+Here’s a step-by-step guide to create a sample Spring Boot application using **StAEDI (Streaming API for EDI)** to read and generate EDI files:
+
+---
+
+### **Step 1: Set Up a Spring Boot Application**
+
+1. **Create a Spring Boot Project**:
+   Use Spring Initializr (https://start.spring.io/) with the following configurations:
+   - **Dependencies**: Spring Web, Spring Boot DevTools (optional for development).
+
+2. **Add StAEDI Dependency**:
+   Add the StAEDI dependency in your `pom.xml` file:
+   ```xml
+   <dependency>
+       <groupId>io.xlate.staedi</groupId>
+       <artifactId>staedi</artifactId>
+       <version>1.13.1</version> <!-- Check for the latest version -->
+   </dependency>
+   ```
+
+---
+
+### **Step 2: Create a Service to Read EDI Files**
+
+1. **Define the Service**:
+   Create a service class to parse the EDI file and extract data.
+
+   ```java
+   package com.example.edi.service;
+
+   import io.xlate.staedi.EDIReader;
+   import io.xlate.staedi.EDIStreamReader;
+   import io.xlate.staedi.factory.StaEDIStreamReaderFactory;
+
+   import java.io.InputStream;
+   import java.util.HashMap;
+   import java.util.Map;
+
+   public class EDIService {
+
+       public Map<String, String> parseEDI(InputStream ediStream) throws Exception {
+           Map<String, String> data = new HashMap<>();
+
+           try (EDIReader reader = StaEDIStreamReaderFactory.createReader(ediStream)) {
+               while (reader.hasNext()) {
+                   int eventType = reader.next();
+
+                   if (eventType == EDIStreamReader.ELEMENT_DATA) {
+                       String tag = reader.getText();
+                       String value = reader.getElementData();
+
+                       data.put(tag, value);
+                   }
+               }
+           }
+
+           return data;
+       }
+   }
+   ```
+
+---
+
+### **Step 3: Create a Service to Generate EDI Files**
+
+1. **Define the Generation Logic**:
+   Use the StAEDI Writer API to generate EDI content.
+
+   ```java
+   package com.example.edi.service;
+
+   import io.xlate.staedi.EDIStreamWriter;
+   import io.xlate.staedi.factory.StaEDIStreamWriterFactory;
+
+   import java.io.OutputStream;
+
+   public class EDIService {
+
+       public void generateEDI(OutputStream outputStream) throws Exception {
+           try (EDIStreamWriter writer = StaEDIStreamWriterFactory.createWriter(outputStream)) {
+               writer.startInterchange();
+               writer.writeSegment("ISA", "00", "", "00", "", "ZZ", "SENDERID", "ZZ", "RECEIVERID", "201231", "1253", "U", "00401", "000000001", "0", "P", ":");
+               writer.writeSegment("GS", "IN", "SENDERID", "RECEIVERID", "20231231", "1253", "1", "X", "004010");
+               writer.writeSegment("ST", "850", "0001");
+               writer.writeSegment("SE", "2", "0001");
+               writer.writeSegment("GE", "1", "1");
+               writer.writeSegment("IEA", "1", "000000001");
+               writer.endInterchange();
+           }
+       }
+   }
+   ```
+
+   Combine parsing and generation into a single `EDIService` class if preferred.
+
+---
+
+### **Step 4: Create a REST Controller**
+
+1. **Define the Controller**:
+   Use REST endpoints to accept and return EDI files.
+
+   ```java
+   package com.example.edi.controller;
+
+   import com.example.edi.service.EDIService;
+   import org.springframework.beans.factory.annotation.Autowired;
+   import org.springframework.web.bind.annotation.*;
+   import org.springframework.http.ResponseEntity;
+
+   import java.io.ByteArrayInputStream;
+   import java.io.ByteArrayOutputStream;
+   import java.util.Map;
+
+   @RestController
+   @RequestMapping("/edi")
+   public class EDIController {
+
+       @Autowired
+       private EDIService ediService;
+
+       @PostMapping("/parse")
+       public ResponseEntity<Map<String, String>> parseEDI(@RequestBody byte[] ediFile) throws Exception {
+           ByteArrayInputStream inputStream = new ByteArrayInputStream(ediFile);
+           Map<String, String> data = ediService.parseEDI(inputStream);
+           return ResponseEntity.ok(data);
+       }
+
+       @GetMapping("/generate")
+       public ResponseEntity<byte[]> generateEDI() throws Exception {
+           ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+           ediService.generateEDI(outputStream);
+           return ResponseEntity.ok(outputStream.toByteArray());
+       }
+   }
+   ```
+
+---
+
+### **Step 5: Test the Application**
+
+1. **Run the Application**:
+   Start the Spring Boot application.
+
+2. **Test Parsing**:
+   Use Postman or curl to send a POST request to `/edi/parse` with an EDI file in the request body.
+
+   Example:
+   ```bash
+   curl -X POST -H "Content-Type: application/octet-stream" --data-binary @sample.edi http://localhost:8080/edi/parse
+   ```
+
+3. **Test Generation**:
+   Send a GET request to `/edi/generate` to generate an EDI file.
+
+   Example:
+   ```bash
+   curl -X GET http://localhost:8080/edi/generate -o generated.edi
+   ```
+
+---
+
+### **Sample EDI File**
+Use this sample file for testing:
+
+```plaintext
+ISA*00*          *00*          *ZZ*SENDERID       *ZZ*RECEIVERID     *201231*1253*U*00401*000000001*0*P*:
+GS*IN*SENDERID*RECEIVERID*20231231*1253*1*X*004010
+ST*850*0001
+SE*2*0001
+GE*1*1
+IEA*1*000000001
+```
+
+---
+
+### **Key Points**
+- Ensure that `StaEDI` library is properly configured.
+- Handle exceptions for parsing and generating robustly.
+- Test with various EDI formats to confirm compliance with standards.
+
+Let me know if you need further customization or explanations!
